@@ -142,6 +142,14 @@ static u16 get_cv_pitch_out_format(void) {
 	return sys_params.cv_pitch_out_format;
 }
 
+static u16 get_touch_stable_ticks(void) {
+	return (sys_params.touch_stable_ticks_ofs + DEFAULT_TOUCH_STABLE_TICKS) % NUM_TOUCH_STABLE_TICKS;
+}
+
+static u16 get_touch_stable_range(void) {
+	return (sys_params.touch_stable_range_ofs + DEFAULT_TOUCH_STABLE_RANGE) % NUM_TOUCH_STABLE_RANGES;
+}
+
 typedef u16 (*SysParamGetter)(void);
 
 const SysParamGetter sys_param_getters[] = {
@@ -180,6 +188,8 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_CV_GATE_IN_IS_PRESSURE] = get_cv_gate_in_is_pressure,
     [SYS_LAYOUT_GLOBAL] = get_layout_global,
     [SYS_CV_PITCH_OUT_FORMAT] = get_cv_pitch_out_format,
+    [SYS_TOUCH_STABLE_TICKS] = get_touch_stable_ticks,
+    [SYS_TOUCH_STABLE_RANGE] = get_touch_stable_range,
 };
 
 // sys param setters
@@ -330,6 +340,15 @@ static void set_cv_pitch_out_format(u16 value) {
 	sys_params.cv_pitch_out_format = value;
 }
 
+static void set_touch_stable_ticks(u16 value) {
+	sys_params.touch_stable_ticks_ofs = (value + NUM_TOUCH_STABLE_TICKS - DEFAULT_TOUCH_STABLE_TICKS) % NUM_TOUCH_STABLE_TICKS;
+}
+
+static void set_touch_stable_range(u16 value) {
+	sys_params.touch_stable_range_ofs =
+	    (value + NUM_TOUCH_STABLE_RANGES - DEFAULT_TOUCH_STABLE_RANGE) % NUM_TOUCH_STABLE_RANGES;
+}
+
 typedef void (*SysParamSetter)(u16);
 
 const SysParamSetter sys_param_setters[] = {
@@ -368,6 +387,8 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_CV_GATE_IN_IS_PRESSURE] = set_cv_gate_in_is_pressure,
     [SYS_LAYOUT_GLOBAL] = set_layout_global,
     [SYS_CV_PITCH_OUT_FORMAT] = set_cv_pitch_out_format,
+    [SYS_TOUCH_STABLE_TICKS] = set_touch_stable_ticks,
+    [SYS_TOUCH_STABLE_RANGE] = set_touch_stable_range,
 };
 
 const u8 sys_param_ranges[] = {
@@ -406,6 +427,8 @@ const u8 sys_param_ranges[] = {
     [SYS_CV_GATE_IN_IS_PRESSURE] = 2,
     [SYS_LAYOUT_GLOBAL] = 2,
     [SYS_CV_PITCH_OUT_FORMAT] = 2,
+    [SYS_TOUCH_STABLE_TICKS] = NUM_TOUCH_STABLE_TICKS,
+    [SYS_TOUCH_STABLE_RANGE] = NUM_TOUCH_STABLE_RANGES,
 };
 
 const static GlobalData init_global_data = {
@@ -466,6 +489,7 @@ const static SysParams init_sys_params = {
     .cv_gate_in_is_pressure = false,
     .reference_pitch = 10, // 440Hz
     .pad1 = 0,
-    .pad2 = 0,
+    .touch_stable_ticks_ofs = 0, // default
+    .touch_stable_range_ofs = 0, // default
     .version = LPE_SYS_PARAMS_VERSION,
 };
