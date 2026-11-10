@@ -1256,7 +1256,9 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	}
 }
 
-void midi_tick(void) {
+// send everything that was cued up to this point in the tick - this runs after the clock, so that clock and transport
+// messages go out in the same tick that generated them
+void midi_send_tick(void) {
 	cue_midi_out();
 
 	// send to uart
@@ -1274,7 +1276,11 @@ void midi_tick(void) {
 			HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, send_len);
 		}
 	}
+}
 
+// receive incoming midi - this runs before the clock, so that incoming clock and transport messages are applied in the
+// same tick that received them
+void midi_rcv_tick(void) {
 	// sysex timeout
 	if (receiving_sysex && millis() - sysex_start_time >= SYSEX_TIMEOUT_MILLIS)
 		receiving_sysex = false;

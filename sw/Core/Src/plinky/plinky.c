@@ -182,8 +182,8 @@ void plinky_codec_tick(u32* audio_out, u32* audio_in) {
 
 	log_time();
 
-	// midi
-	midi_tick();
+	// midi in
+	midi_rcv_tick();
 
 	// adc / dac
 	adc_dac_tick();
@@ -193,6 +193,9 @@ void plinky_codec_tick(u32* audio_out, u32* audio_in) {
 
 	// sequencer
 	seq_tick();
+
+	// midi out
+	midi_send_tick();
 
 	log_time();
 
