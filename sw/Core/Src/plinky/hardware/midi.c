@@ -590,14 +590,18 @@ static void cue_midi_out(void) {
 	}
 
 	// send transport
+	bool hold_clock = false;
 	if (send_transport != MIDI_NONE) {
 		if (!send_midi_msg(send_transport, 0, 0))
 			return;
+		// the midi spec asks for at least 1ms between start/continue and the first clock pulse: a receiver that is still
+		// processing the transport message misses that pulse and starts one pulse late => hold the clock for one tick
+		hold_clock = send_transport == MIDI_START || send_transport == MIDI_CONTINUE;
 		send_transport = MIDI_NONE;
 	}
 
 	// send clock
-	while (clocks_to_send) {
+	while (clocks_to_send && !hold_clock) {
 		if (!send_midi_msg(MIDI_TIMING_CLOCK, 0, 0))
 			return;
 		clocks_to_send--;
@@ -1256,7 +1260,9 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	}
 }
 
-void midi_tick(void) {
+// send everything that was cued up to this point in the tick - this runs after the clock, so that clock and transport
+// messages go out in the same tick that generated them
+void midi_send_tick(void) {
 	cue_midi_out();
 
 	// send to uart
@@ -1274,7 +1280,11 @@ void midi_tick(void) {
 			HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, send_len);
 		}
 	}
+}
 
+// receive incoming midi - this runs before the clock, so that incoming clock and transport messages are applied in the
+// same tick that received them
+void midi_rcv_tick(void) {
 	// sysex timeout
 	if (receiving_sysex && millis() - sysex_start_time >= SYSEX_TIMEOUT_MILLIS)
 		receiving_sysex = false;
