@@ -94,6 +94,13 @@ static u16 const sync_divs_32nds[NUM_SYNC_DIVS] = {1,  2,  3,  4,  5,   6,   8, 
                                                    48, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512, 640, 768, 1024};
 static u8 const ppqn_values[NUM_PPQN_VALUES] = {1, 2, 4, 8, 16, 24, 48};
 
+// touch stability: a new touch needs to hold its position for a number of ticks before it is recognized
+#define NUM_TOUCH_STABLE_TICKS 32                   // 0 - 31 ticks
+#define DEFAULT_TOUCH_STABLE_TICKS 9                // 18ms
+#define NUM_TOUCH_STABLE_RANGES 8                   // index 0 - 7
+#define DEFAULT_TOUCH_STABLE_RANGE 3                // 32 position units, a pad is 256 units high
+#define TOUCH_STABLE_RANGE(index) (((index) + 1) << 3) // 8 - 64 position units
+
 // MIDI
 
 #define NUM_BEND_RANGES 8
@@ -284,6 +291,8 @@ typedef enum SysParam {
 	SYS_CV_GATE_IN_IS_PRESSURE,
 	SYS_LAYOUT_GLOBAL,
 	SYS_CV_PITCH_OUT_FORMAT,
+	SYS_TOUCH_STABLE_TICKS,
+	SYS_TOUCH_STABLE_RANGE,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
@@ -934,7 +943,10 @@ typedef struct SysParams {
 	bool cv_pitch_out_format : 1; // 0 = V/Oct, 1 = Hz/V
 	u8 pad1 : 2;
 	// 14 bytes
-	u8 pad2;
+	// these two took the place of a padding byte and are saved as an offset from their default value, so that the
+	// zeroes in existing system settings read as the defaults - no settings version bump needed
+	u8 touch_stable_ticks_ofs : 5;
+	u8 touch_stable_range_ofs : 3;
 	// 15 bytes
 	u8 version;
 	// 16 bytes

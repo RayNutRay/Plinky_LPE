@@ -10,7 +10,6 @@
 extern TSC_HandleTypeDef htsc;
 
 #define TOUCH_THRESHOLD 1000
-#define TOUCH_STABILITY_TICKS 9
 
 static u8 touch_frame = 0; // frame counter for touch reading loop
 static u16 strip_touched = 0;
@@ -18,7 +17,7 @@ static u16 strip_touched = 0;
 static TouchCalibData touch_calib_data[NUM_TOUCH_READINGS];
 static Touch touches[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES];  // the touches
 static u8 module_ticks = 0;                               // tracking ticks for the module
-static u8 touch_ticks[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES]; // synth_tick timestamp for each touch
+static u8 touch_ticks[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES]; // module_ticks timestamp for each touch
 static u16 sensor_val[2 * NUM_TOUCH_READINGS];            // current value (range 0 - 65027)
 static u16 sensor_min[2 * NUM_TOUCH_READINGS];            // lifetime low
 static u16 sensor_max[2 * NUM_TOUCH_READINGS];            // lifetime high
@@ -98,7 +97,8 @@ void fill_latch(u8 strip_id, LatchTouch* latch_touch) {
 // == MAIN == //
 
 static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
-	static const u8 STABLE_POS_RANGE = 32;
+	u8 stable_ticks = get_sys_param(SYS_TOUCH_STABLE_TICKS);
+	u8 stable_pos_range = TOUCH_STABLE_RANGE(get_sys_param(SYS_TOUCH_STABLE_RANGE));
 	u8 cur_tick = module_ticks;
 	u8 pad_y = position >> 8;
 
@@ -108,19 +108,20 @@ static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
 		Touch* hist_touch = &touches[touch_id][hist_frame];
 
 		// position out of range or different pad => not stable
-		if (abs(hist_touch->pos - position) > STABLE_POS_RANGE || (hist_touch->pos >> 8) != pad_y)
+		if (abs(hist_touch->pos - position) > stable_pos_range || (hist_touch->pos >> 8) != pad_y)
 			return false;
 
 		// within accepted ranges and old enough => stable
-		if (cur_tick - touch_ticks[touch_id][hist_frame] >= TOUCH_STABILITY_TICKS)
+		if ((u8)(cur_tick - touch_ticks[touch_id][hist_frame]) >= stable_ticks)
 			return true;
 
 		// within accepted ranges but not old enough => check previous frame
 		hist_frame = (hist_frame + 7) & 7;
 	}
 
-	// no historical sample old enough found
-	return false;
+	// the entire history is within accepted ranges, this is as stable as we can measure - a long stable_ticks setting
+	// can ask for more time than the history holds, without this a touch would then never be recognized
+	return true;
 }
 
 static void process_reading(u8 reading_id) {
@@ -213,7 +214,7 @@ static void process_reading(u8 reading_id) {
 	// save results to touch
 	touches[touch_id][touch_frame].pres = calib_pres;
 	touches[touch_id][touch_frame].pos = calib_pos;
-	touch_ticks[touch_id][touch_frame] = synth_tick;
+	touch_ticks[touch_id][touch_frame] = module_ticks;
 
 	// sensor value has been read
 	read_this_frame |= 1 << touch_id;

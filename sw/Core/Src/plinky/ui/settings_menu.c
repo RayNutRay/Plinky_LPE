@@ -25,6 +25,8 @@ typedef enum Item {
 	I_REFERENCE_PITCH,
 	I_MIDI_TUNING,
 	I_LOCAL_CTRL_OFF,
+	I_TOUCH_STABLE_TICKS,
+	I_TOUCH_STABLE_RANGE,
 	// midi in
 	I_MIDI_IN_CH = S_MIDI_IN * 8,
 	I_MPE_IN,
@@ -76,6 +78,8 @@ const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
     [I_REFERENCE_PITCH] = SYS_REFERENCE_PITCH,
     [I_LOCAL_CTRL_OFF] = SYS_LOCAL_CTRL_OFF,
     [I_MIDI_TUNING] = SYS_MIDI_TUNING,
+    [I_TOUCH_STABLE_TICKS] = SYS_TOUCH_STABLE_TICKS,
+    [I_TOUCH_STABLE_RANGE] = SYS_TOUCH_STABLE_RANGE,
     [I_MPE_IN] = SYS_MPE_IN,
     [I_MIDI_IN_CH] = SYS_MIDI_IN_CHAN,
     [I_MIDI_IN_VEL_BALANCE] = SYS_MIDI_IN_VEL_BALANCE,
@@ -115,6 +119,8 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_REFERENCE_PITCH] = "Ref A4 =",
     [I_LOCAL_CTRL_OFF] = "Local Ctrl",
     [I_MIDI_TUNING] = "Midi Tuning",
+    [I_TOUCH_STABLE_TICKS] = "Tch Time",
+    [I_TOUCH_STABLE_RANGE] = "Tch Range",
     [I_MPE_IN] = "MPE",
     [I_MIDI_IN_CH] = "Channel",
     [I_MIDI_IN_VEL_BALANCE] = "Vel/Pres",
@@ -385,6 +391,14 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return value ? "Invert" : "Normal";
 	case I_REFERENCE_PITCH:
 		sprintf(val_buf, "%dHz", 430 + value);
+		return val_buf;
+	// how long a new touch needs to hold its position, a tick is 2ms
+	case I_TOUCH_STABLE_TICKS:
+		sprintf(val_buf, "%dms", 2 * value);
+		return val_buf;
+	// how far a new touch is allowed to move while it settles, in position units
+	case I_TOUCH_STABLE_RANGE:
+		sprintf(val_buf, "%d", TOUCH_STABLE_RANGE(value));
 		return val_buf;
 	// shown as a percentage
 	case I_MIDI_IN_VEL_BALANCE:
