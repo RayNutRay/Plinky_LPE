@@ -590,14 +590,18 @@ static void cue_midi_out(void) {
 	}
 
 	// send transport
+	bool hold_clock = false;
 	if (send_transport != MIDI_NONE) {
 		if (!send_midi_msg(send_transport, 0, 0))
 			return;
+		// the midi spec asks for at least 1ms between start/continue and the first clock pulse: a receiver that is still
+		// processing the transport message misses that pulse and starts one pulse late => hold the clock for one tick
+		hold_clock = send_transport == MIDI_START || send_transport == MIDI_CONTINUE;
 		send_transport = MIDI_NONE;
 	}
 
 	// send clock
-	while (clocks_to_send) {
+	while (clocks_to_send && !hold_clock) {
 		if (!send_midi_msg(MIDI_TIMING_CLOCK, 0, 0))
 			return;
 		clocks_to_send--;
