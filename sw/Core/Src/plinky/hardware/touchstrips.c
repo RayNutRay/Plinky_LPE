@@ -18,7 +18,7 @@ static u16 strip_touched = 0;
 static TouchCalibData touch_calib_data[NUM_TOUCH_READINGS];
 static Touch touches[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES];  // the touches
 static u8 module_ticks = 0;                               // tracking ticks for the module
-static u8 touch_ticks[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES]; // synth_tick timestamp for each touch
+static u8 touch_ticks[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES]; // module_ticks timestamp for each touch
 static u16 sensor_val[2 * NUM_TOUCH_READINGS];            // current value (range 0 - 65027)
 static u16 sensor_min[2 * NUM_TOUCH_READINGS];            // lifetime low
 static u16 sensor_max[2 * NUM_TOUCH_READINGS];            // lifetime high
@@ -112,7 +112,7 @@ static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
 			return false;
 
 		// within accepted ranges and old enough => stable
-		if (cur_tick - touch_ticks[touch_id][hist_frame] >= TOUCH_STABILITY_TICKS)
+		if ((u8)(cur_tick - touch_ticks[touch_id][hist_frame]) >= TOUCH_STABILITY_TICKS)
 			return true;
 
 		// within accepted ranges but not old enough => check previous frame
@@ -213,7 +213,7 @@ static void process_reading(u8 reading_id) {
 	// save results to touch
 	touches[touch_id][touch_frame].pres = calib_pres;
 	touches[touch_id][touch_frame].pos = calib_pos;
-	touch_ticks[touch_id][touch_frame] = synth_tick;
+	touch_ticks[touch_id][touch_frame] = module_ticks;
 
 	// sensor value has been read
 	read_this_frame |= 1 << touch_id;
