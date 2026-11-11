@@ -461,8 +461,10 @@ static bool cue_midi_string_out(void) {
 			// require a difference of 5, unless this is an extreme value
 			min_diff = (poly_pres == 0 || poly_pres == 127) ? 1 : 5;
 		}
-		// send if changed
-		if (abs(poly_pres - m_last->pressure) >= min_diff) {
+		// send if changed - poly aftertouch needs a sounding note to address: before the note on has been sent, the
+		// note number is still 255, which is not a data byte but the status byte for a system reset. in that case the
+		// pressure is left unsent and goes out right after the note on
+		if (abs(poly_pres - m_last->pressure) >= min_diff && (using_mpe || m_last->note_number != 255)) {
 			if (using_mpe ? !send_midi_msg(MIDI_CHANNEL_PRESSURE, poly_pres, 0)
 			              : !send_midi_msg(MIDI_POLY_KEY_PRESSURE, m_last->note_number, poly_pres))
 				return false;
