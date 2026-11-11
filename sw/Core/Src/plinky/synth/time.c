@@ -10,6 +10,8 @@
 
 // amount of ticks for one pulse at the lowest allowable bpm
 #define MAX_CLOCK_GAP_TICKS(ppqn) ((600 * SAMPLE_RATE) / (ppqn * MIN_BPM_10X * SAMPLES_PER_TICK))
+// longest time between two pulses that still counts as a running clock: 1 ppqn at the lowest allowable bpm
+#define MAX_PULSE_TICKS MAX_CLOCK_GAP_TICKS(1)
 #define CUR_PULSE_COUNT(ppqn) ((ppqn * clock_32nds_q21) >> 24)
 #define MIDI_PPQN (48 >> sys_params.midi_in_clock_mult)
 
@@ -39,7 +41,7 @@ static volatile u8 cv_irq_pulse = 0;
 static bool cv_irq_pulse_handled = false;
 static u8 cv_in_pulse_counter = 0;
 static u32 ticks_since_cv_in_pulse = 0;
-static u32 last_cv_in_pulse_ticks = 0;
+static u32 last_cv_in_pulse_ticks = 0; // length of the last pulse of a running clock, 0 = not known yet
 
 // swing
 static const u32 MAX_SWING_Q21 = (u32)(MAX_SWING * (1 << 21));
@@ -194,8 +196,10 @@ void clock_tick(void) {
 	ticks_since_midi_pulse++;
 
 	if (cv_irq_pulse) {
-		// track pulses
-		last_cv_in_pulse_ticks = ticks_since_cv_in_pulse;
+		// track pulses - the first pulse after the clock was stopped tells us nothing about the tempo, in that case we
+		// hold on to the pulse length the clock had before it stopped: it most likely restarts at the same tempo
+		if (ticks_since_cv_in_pulse <= MAX_PULSE_TICKS)
+			last_cv_in_pulse_ticks = ticks_since_cv_in_pulse;
 		ticks_since_cv_in_pulse = 0;
 		cv_in_pulse_counter++;
 		cv_irq_pulse_handled = true;
@@ -206,7 +210,10 @@ void clock_tick(void) {
 
 	// cv clock timeout
 	u8 cv_in_ppqn = ppqn_values[sys_params.cv_in_ppqn];
-	if (clock_type == CLK_CV && ticks_since_cv_in_pulse > MAX_CLOCK_GAP_TICKS(cv_in_ppqn))
+	// wait for one pulse at the lowest bpm, or for two pulses of the clock we are actually receiving if that is longer:
+	// a clock that is slower than the ppqn setting suggests is then followed, instead of dropped after every pulse
+	u32 cv_timeout = maxi(MAX_CLOCK_GAP_TICKS(cv_in_ppqn), 2 * last_cv_in_pulse_ticks);
+	if (clock_type == CLK_CV && ticks_since_cv_in_pulse > cv_timeout)
 		set_clock_type(CLK_MIDI);
 
 	if (midi_pulse) {
@@ -250,22 +257,29 @@ void clock_tick(void) {
 	// handle global accumulator clock
 	switch (clock_type) {
 	case CLK_CV: {
-		u32 max_gap = MAX_CLOCK_GAP_TICKS(cv_in_ppqn);
 		// cv pulse => snap the clock to the pulse position
 		if (cv_irq_pulse) {
-			clock_32nds_q21 = (cv_in_pulse_counter << 24) / cv_in_ppqn;
+			// u32: at 48 ppqn the counter runs up to 192, which does not fit a signed int after the shift
+			clock_32nds_q21 = ((u32)cv_in_pulse_counter << 24) / cv_in_ppqn;
 			cv_in_pulse_counter = cv_in_pulse_counter % (cv_in_ppqn << 2);
-			if (last_cv_in_pulse_ticks <= max_gap && ticks_since_cv_in_pulse <= max_gap)
+			if (last_cv_in_pulse_ticks)
 				// we only calculate the bmp to show on the display
 				calc_bmp_from_ext(last_cv_in_pulse_ticks, ticks_since_cv_in_pulse, cv_in_ppqn);
-			break;
 		}
-		// valid last pulse length => calculate clock from previous pulse
-		else if (last_cv_in_pulse_ticks <= max_gap) {
+		// known pulse length => calculate clock from previous pulse
+		else if (last_cv_in_pulse_ticks) {
 			clock_32nds_q21 += (1 << 24) / (cv_in_ppqn * last_cv_in_pulse_ticks);
-			break;
+			// never run past the position of the next pulse: when the clock slows down we wait there for the pulse,
+			// instead of overshooting and getting pulled back
+			u32 pulse_q21 = (1 << 24) / cv_in_ppqn;
+			u32 next_pulse_pos_q21 = ((u32)(cv_in_pulse_counter + 1) << 24) / cv_in_ppqn;
+			// (only when we just crossed it: never pull the clock back by more than this tick's progress)
+			if (clock_32nds_q21 >= next_pulse_pos_q21 && clock_32nds_q21 - next_pulse_pos_q21 < pulse_q21)
+				clock_32nds_q21 = next_pulse_pos_q21 - 1;
 		}
-	} // no valid pulse length => progress by midi clock
+		// no known pulse length (first pulse since boot) => hold position until the second pulse
+		break;
+	}
 	case CLK_MIDI: {
 		u32 max_gap = MAX_CLOCK_GAP_TICKS(midi_ppqn);
 		// midi pulse => snap the clock to the pulse position
@@ -279,7 +293,9 @@ void clock_tick(void) {
 		}
 		// valid last pulse length => calculate clock from previous pulse
 		else if (last_midi_pulse_ticks <= max_gap) {
-			clock_32nds_q21 += (1 << 24) / (midi_ppqn * last_midi_pulse_ticks);
+			// no pulse length known yet (first pulse since boot) => hold position until the second pulse
+			if (last_midi_pulse_ticks)
+				clock_32nds_q21 += (1 << 24) / (midi_ppqn * last_midi_pulse_ticks);
 			break;
 		}
 	} // no valid pulse length => progress by internal clock
