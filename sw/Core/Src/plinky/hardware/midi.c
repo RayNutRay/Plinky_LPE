@@ -1263,16 +1263,15 @@ void midi_tick(void) {
 	if (midi_send_head != midi_send_tail) {
 		u8 from = midi_send_tail & 15;
 		u8 to = midi_send_head & 15;
-		if (to > from) {
-			midi_send_tail += (to - from);
-			HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, to - from);
-		}
-		else {
-			u8 send_len = (MIDI_BUFFER_SIZE - from) + to;
+		u8 send_len = to > from ? to - from : (MIDI_BUFFER_SIZE - from) + to;
+		// linearize send across buffer boundary
+		if (to <= from)
 			memcpy(midi_send_buffer + MIDI_BUFFER_SIZE, midi_send_buffer, to);
+		// the uart refuses a new transfer until the last byte of the previous one has left the shift register, which is
+		// up to two bytes (640us) after TxXferCount reaches zero - only consume the bytes when the transfer was
+		// accepted, otherwise they stay in the buffer and are sent next tick
+		if (HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, send_len) == HAL_OK)
 			midi_send_tail += send_len;
-			HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, send_len);
-		}
 	}
 
 	// sysex timeout
