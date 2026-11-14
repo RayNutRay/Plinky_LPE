@@ -13,6 +13,7 @@ typedef enum Section {
 	S_MIDI_IN,
 	S_MIDI_OUT,
 	S_CV,
+	S_CLOCK,
 	S_ACTIONS,
 	NUM_SYS_PARAM_SECTS,
 } Section;
@@ -51,6 +52,9 @@ typedef enum Item {
 	I_CV_PPQN_IN,
 	I_CV_PPQN_OUT,
 	I_CV_PITCH_OUT_FORMAT,
+	// clock
+	I_MIDI_OUT_CLOCK_DIV = S_CLOCK * 8,
+	I_MIDI_OUT_NOTES_OFF,
 	// actions
 	I_REBOOT = S_ACTIONS * 8,
 	I_TOUCH_CALIB,
@@ -98,6 +102,8 @@ const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
     [I_MIDI_TRS_OUT_OFF] = SYS_MIDI_TRS_OUT_OFF,
     [I_CV_QUANT] = SYS_CV_QUANT,
     [I_CV_GATE_IN_IS_PRESSURE] = SYS_CV_GATE_IN_IS_PRESSURE,
+    [I_MIDI_OUT_CLOCK_DIV] = SYS_MIDI_OUT_CLOCK_DIV,
+    [I_MIDI_OUT_NOTES_OFF] = SYS_MIDI_OUT_NOTES_OFF,
     [I_CV_PPQN_IN] = SYS_CV_PPQN_IN,
     [I_CV_PPQN_OUT] = SYS_CV_PPQN_OUT,
     [I_CV_PITCH_OUT_FORMAT] = SYS_CV_PITCH_OUT_FORMAT,
@@ -109,7 +115,7 @@ const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
 
 const static char* section_name[NUM_SYS_PARAM_SECTS] = {
     [S_SYSTEM] = "System", [S_MIDI_IN] = "Midi in", [S_MIDI_OUT] = "Midi out",
-    [S_CV] = "CV in",      [S_ACTIONS] = "Actions",
+    [S_CV] = "CV in",      [S_CLOCK] = "Clock",   [S_ACTIONS] = "Actions",
 };
 
 const static char* item_name[NUM_MENU_ITEMS] = {
@@ -139,6 +145,8 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_MIDI_TRS_OUT_OFF] = "TRS out",
     [I_CV_QUANT] = "Quant",
     [I_CV_GATE_IN_IS_PRESSURE] = "Gate",
+    [I_MIDI_OUT_CLOCK_DIV] = "Midi out",
+    [I_MIDI_OUT_NOTES_OFF] = "Notes",
     [I_CV_PPQN_IN] = "PPQN",
     [I_CV_PPQN_OUT] = "PPQN",
     [I_CV_PITCH_OUT_FORMAT] = "Format",
@@ -224,6 +232,8 @@ static void save_value(s16 value) {
 		midi_precalc_bends();
 		break;
 	case I_MIDI_OUT_CH:
+	// switching the note stream off mid-note would leave the note on: release everything first
+	case I_MIDI_OUT_NOTES_OFF:
 		if (set_sys_param(param, value))
 			midi_clear_all();
 		break;
@@ -343,7 +353,8 @@ void edit_settings_from_encoder(s8 enc_diff) {
 		    // upper zone channels go from high to low
 		    || (is_mpe_chans && sys_params.mpe_zone == 1)
 		    // inverted params
-		    || cur_item == I_LOCAL_CTRL_OFF || cur_item == I_MIDI_TRS_OUT_OFF)
+		    || cur_item == I_LOCAL_CTRL_OFF || cur_item == I_MIDI_TRS_OUT_OFF
+		    || cur_item == I_MIDI_OUT_NOTES_OFF)
 			enc_diff = -enc_diff;
 		// update value
 		new_value += enc_diff;
@@ -394,7 +405,11 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return val_buf;
 	// how long a new touch needs to hold its position, a tick is 2ms
 	case I_TOUCH_STABLE_TICKS:
-		sprintf(val_buf, "%dms", 2 * value);
+		sprintf(val_buf, "%dms", 2 * touch_stable_ticks[value]);
+		return val_buf;
+	// midi clock out divider, shown with the resulting pulses per quarter note
+	case I_MIDI_OUT_CLOCK_DIV:
+		sprintf(val_buf, "/%d =%d", midi_out_clock_divs[value], MIDI_OUT_PPQN / midi_out_clock_divs[value]);
 		return val_buf;
 	// how far a new touch is allowed to move while it settles, in position units
 	case I_TOUCH_STABLE_RANGE:
@@ -448,6 +463,7 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return value ? "On" : "Off";
 	case I_LOCAL_CTRL_OFF:
 	case I_MIDI_TRS_OUT_OFF:
+	case I_MIDI_OUT_NOTES_OFF:
 		return value ? "Off" : "On";
 	case I_MIDI_SOFT_THRU:
 		return value ? "Consume" : "Off";

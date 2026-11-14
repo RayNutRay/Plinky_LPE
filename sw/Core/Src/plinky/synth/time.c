@@ -29,6 +29,7 @@ static ValueSmoother bpm_smoother;
 static bool reset_clock_next_tick = false;
 
 // midi clock
+static u8 prev_midi_out_pulse = 0; // index of the last outgoing pulse within the quarter
 static bool midi_pulse = false;
 static u8 midi_pulse_counter = 0;
 static u32 ticks_since_midi_pulse = 0;
@@ -163,6 +164,13 @@ void cue_clock_reset(void) {
 	reset_clock_next_tick = true;
 }
 
+// a plinky that is not following an external clock and is not running a sequencer or an arp has no business
+// conducting: otherwise it keeps a connected device running at the tempo of the current preset after the external
+// clock stopped. the arp counts, it runs off the same grid and is played along to just like the sequencer
+static bool conducting(void) {
+	return clock_type != CLK_INTERNAL || seq_playing() || arp_active_mask();
+}
+
 void clock_reset(void) {
 	cleanup_clock_flags();
 	cv_in_pulse_counter = 0;
@@ -171,7 +179,11 @@ void clock_reset(void) {
 	counter_32nds = 0;
 	calc_position(true);
 	pulse_32nd = true; // this is the start of a 32nd
-	midi_send_clock(); // this is the start of a 24 ppqn pulse
+	if (conducting())
+		midi_send_clock(); // this is the start of a 24 ppqn pulse
+	// we just sent pulse 0 of the quarter by hand, so that is where the outgoing clock stands now. without this the
+	// stale index from before the reset either sent a second pulse right behind the first, or swallowed the next one
+	prev_midi_out_pulse = 0;
 	reset_clock_next_tick = false;
 }
 
@@ -309,10 +321,12 @@ void clock_tick(void) {
 	cleanup_clock_flags();
 
 	// check for midi out pulse
-	static u8 prev_midi_out_pulse = 0;
-	u8 midi_out_pulse = (clock_32nds_q21 & ((1 << 21) - 1)) * 24 >> 24;
+	// position within the current quarter note (8 32nds = 1 << 24) scaled to the number of pulses we send per quarter
+	u8 ppqn_out = MIDI_OUT_PPQN / midi_out_clock_divs[sys_params.midi_out_clock_div];
+	u8 midi_out_pulse = ((clock_32nds_q21 & ((1 << 24) - 1)) * ppqn_out) >> 24;
 	if (midi_out_pulse != prev_midi_out_pulse) {
-		midi_send_clock();
+		if (conducting())
+			midi_send_clock();
 		prev_midi_out_pulse = midi_out_pulse;
 	}
 
