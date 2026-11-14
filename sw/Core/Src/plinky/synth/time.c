@@ -29,6 +29,7 @@ static ValueSmoother bpm_smoother;
 static bool reset_clock_next_tick = false;
 
 // midi clock
+static u8 prev_midi_out_pulse = 0; // index of the last outgoing pulse within the quarter
 static bool midi_pulse = false;
 static u8 midi_pulse_counter = 0;
 static u32 ticks_since_midi_pulse = 0;
@@ -179,6 +180,9 @@ void clock_reset(void) {
 	pulse_32nd = true; // this is the start of a 32nd
 	if (conducting())
 		midi_send_clock(); // this is the start of a 24 ppqn pulse
+	// we just sent pulse 0 of the quarter by hand, so that is where the outgoing clock stands now. without this the
+	// stale index from before the reset either sent a second pulse right behind the first, or swallowed the next one
+	prev_midi_out_pulse = 0;
 	reset_clock_next_tick = false;
 }
 
@@ -316,7 +320,6 @@ void clock_tick(void) {
 	cleanup_clock_flags();
 
 	// check for midi out pulse
-	static u8 prev_midi_out_pulse = 0;
 	// position within the current quarter note (8 32nds = 1 << 24) scaled to the number of pulses we send per quarter
 	u8 ppqn_out = MIDI_OUT_PPQN / midi_out_clock_divs[sys_params.midi_out_clock_div];
 	u8 midi_out_pulse = ((clock_32nds_q21 & ((1 << 24) - 1)) * ppqn_out) >> 24;
