@@ -163,6 +163,12 @@ void cue_clock_reset(void) {
 	reset_clock_next_tick = true;
 }
 
+// a plinky that is not following an external clock and is not playing its own sequencer has no business conducting:
+// otherwise it keeps a connected device running at the tempo of the current preset after the external clock stopped
+static bool conducting(void) {
+	return clock_type != CLK_INTERNAL || seq_playing();
+}
+
 void clock_reset(void) {
 	cleanup_clock_flags();
 	cv_in_pulse_counter = 0;
@@ -171,7 +177,8 @@ void clock_reset(void) {
 	counter_32nds = 0;
 	calc_position(true);
 	pulse_32nd = true; // this is the start of a 32nd
-	midi_send_clock(); // this is the start of a 24 ppqn pulse
+	if (conducting())
+		midi_send_clock(); // this is the start of a 24 ppqn pulse
 	reset_clock_next_tick = false;
 }
 
@@ -312,7 +319,8 @@ void clock_tick(void) {
 	static u8 prev_midi_out_pulse = 0;
 	u8 midi_out_pulse = (clock_32nds_q21 & ((1 << 21) - 1)) * 24 >> 24;
 	if (midi_out_pulse != prev_midi_out_pulse) {
-		midi_send_clock();
+		if (conducting())
+			midi_send_clock();
 		prev_midi_out_pulse = midi_out_pulse;
 	}
 
