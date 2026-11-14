@@ -97,7 +97,8 @@ void fill_latch(u8 strip_id, LatchTouch* latch_touch) {
 // == MAIN == //
 
 static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
-	u8 stable_ticks = get_sys_param(SYS_TOUCH_STABLE_TICKS);
+	u8 stable_ticks_index = get_sys_param(SYS_TOUCH_STABLE_TICKS);
+	u8 stable_ticks = TOUCH_STABLE_TICKS(stable_ticks_index);
 	u8 stable_pos_range = TOUCH_STABLE_RANGE(get_sys_param(SYS_TOUCH_STABLE_RANGE));
 	u8 cur_tick = module_ticks;
 	u8 pad_y = position >> 8;
