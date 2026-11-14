@@ -94,12 +94,20 @@ static u16 const sync_divs_32nds[NUM_SYNC_DIVS] = {1,  2,  3,  4,  5,   6,   8, 
                                                    48, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512, 640, 768, 1024};
 static u8 const ppqn_values[NUM_PPQN_VALUES] = {1, 2, 4, 8, 16, 24, 48};
 
+// midi clock out divider: the 24 ppqn of the midi spec divided by one of these, so the pulses stay beat aligned
+#define NUM_MIDI_OUT_CLOCK_DIVS 4
+#define MIDI_OUT_PPQN 24
+static u8 const midi_out_clock_divs[NUM_MIDI_OUT_CLOCK_DIVS] = {1, 2, 3, 4}; // 24, 12, 8, 6 ppqn
+
 // touch stability: a new touch needs to hold its position for a number of ticks before it is recognized
 #define NUM_TOUCH_STABLE_TICKS 32                   // 0 - 31 ticks
 #define DEFAULT_TOUCH_STABLE_TICKS 9                // 18ms
 #define NUM_TOUCH_STABLE_RANGES 8                   // index 0 - 7
 #define DEFAULT_TOUCH_STABLE_RANGE 3                // 32 position units, a pad is 256 units high
 #define TOUCH_STABLE_RANGE(index) (((index) + 1) << 3) // 8 - 64 position units
+// index to ticks: 2ms steps up to 40ms, where the setting is about feel, then 14ms steps up to 194ms, for players who
+// want a slow, deliberate settle. the first 21 indices are unchanged, so the stored offset keeps its meaning
+#define TOUCH_STABLE_TICKS(index) ((index) <= 20 ? (index) : 20 + (((index) - 20) * 7))
 
 // MIDI
 
@@ -293,6 +301,7 @@ typedef enum SysParam {
 	SYS_CV_PITCH_OUT_FORMAT,
 	SYS_TOUCH_STABLE_TICKS,
 	SYS_TOUCH_STABLE_RANGE,
+	SYS_MIDI_OUT_CLOCK_DIV,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
@@ -941,7 +950,7 @@ typedef struct SysParams {
 	u8 cv_gate_in_is_pressure : 1;
 	u8 reference_pitch : 4;
 	bool cv_pitch_out_format : 1; // 0 = V/Oct, 1 = Hz/V
-	u8 pad1 : 2;
+	u8 midi_out_clock_div : 2; // index into midi_out_clock_divs, 0 (= /1) keeps existing settings as they were
 	// 14 bytes
 	// these two took the place of a padding byte and are saved as an offset from their default value, so that the
 	// zeroes in existing system settings read as the defaults - no settings version bump needed

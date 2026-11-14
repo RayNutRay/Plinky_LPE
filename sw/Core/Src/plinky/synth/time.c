@@ -317,7 +317,9 @@ void clock_tick(void) {
 
 	// check for midi out pulse
 	static u8 prev_midi_out_pulse = 0;
-	u8 midi_out_pulse = (clock_32nds_q21 & ((1 << 21) - 1)) * 24 >> 24;
+	// position within the current quarter note (8 32nds = 1 << 24) scaled to the number of pulses we send per quarter
+	u8 ppqn_out = MIDI_OUT_PPQN / midi_out_clock_divs[sys_params.midi_out_clock_div];
+	u8 midi_out_pulse = ((clock_32nds_q21 & ((1 << 24) - 1)) * ppqn_out) >> 24;
 	if (midi_out_pulse != prev_midi_out_pulse) {
 		if (conducting())
 			midi_send_clock();
