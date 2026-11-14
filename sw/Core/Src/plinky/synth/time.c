@@ -164,10 +164,11 @@ void cue_clock_reset(void) {
 	reset_clock_next_tick = true;
 }
 
-// a plinky that is not following an external clock and is not playing its own sequencer has no business conducting:
-// otherwise it keeps a connected device running at the tempo of the current preset after the external clock stopped
+// a plinky that is not following an external clock and is not running a sequencer or an arp has no business
+// conducting: otherwise it keeps a connected device running at the tempo of the current preset after the external
+// clock stopped. the arp counts, it runs off the same grid and is played along to just like the sequencer
 static bool conducting(void) {
-	return clock_type != CLK_INTERNAL || seq_playing();
+	return clock_type != CLK_INTERNAL || seq_playing() || arp_active_mask();
 }
 
 void clock_reset(void) {
