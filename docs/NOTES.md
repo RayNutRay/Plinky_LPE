@@ -94,6 +94,18 @@ To tell them apart: does it happen on indexed params (Scale, Octave - driver) or
 only on the +/-100.0 scale (mask)? On releasing the knob or releasing the click?
 By 0.1 or by a whole position?
 
+## Settings added here
+
+- `Clock` -> `Midi out`: divider for the outgoing midi clock, /1 /2 /3 /4 =
+  24, 12, 8, 6 ppqn. New menu section, since both midi sections were full at
+  eight items. Stored in the two spare SysParams bits, 0 = /1, no version bump.
+- `System` -> `Tch Time` now reaches 194ms instead of 62ms (2ms steps to 40ms,
+  then 14ms). Stored indices keep their meaning. Real ceiling is the 8 frame
+  touch history, about 190ms.
+
+Still untested: there is no arm-none-eabi toolchain in the cloud container, so
+nothing here has been compiled, only reasoned through and simulated.
+
 ## Preset bank batch editing
 
 `tools/plinky_bank.py` - dump / build / verify for PRESETS.UF2.
