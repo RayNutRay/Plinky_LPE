@@ -38,8 +38,15 @@ void encoder_irq(void) {
 	u8 cur_state = prev_hardware_state | (hardware_state << 2);
 	prev_hardware_state = hardware_state;
 	prev_encoder_value = encoder_value;
-	if (hardware_state == 0b11)
-		encoder_value = (encoder_value & ~0b11) | 2; // snap to the middle of a detent (value = 4x + 2)
+	if (hardware_state == 0b11) {
+		// snap to the middle of a detent (value = 4x + 2). the pins only read 0b11 while we sit in a detent, so this
+		// is the one moment the position is known exactly. round to the NEAREST detent, with half-way resolving to
+		// the detent we are in: (v & ~0b11) | 2 always rounded up, which turned two quarter-steps of drift into a
+		// phantom step, always in the same direction
+		s8 offset = encoder_value - 2;
+		s8 detents = (offset > 0 ? offset + 1 : offset - 1) / 4;
+		encoder_value = detents * 4 + 2;
+	}
 	else
 		encoder_value += enc_deltas[cur_state] * (sys_params.reverse_encoder ? -1 : 1);
 
@@ -52,7 +59,9 @@ void encoder_tick(void) {
 	static bool prev_encoder_pressed;
 
 	// extract and consume difference since last tick
-	s8 enc_diff = encoder_value >> 2;
+	// the detent snap puts encoder_value at 4n + 2, so the step count is exact; dividing (which truncates towards
+	// zero) instead of shifting (which floors) keeps the dead zone symmetric around the detent we are resting in
+	s8 enc_diff = (encoder_value - 2) / 4;
 	if (enc_diff || encoder_pressed || prev_encoder_pressed) {
 		encoder_value -= enc_diff << 2;
 		last_encoder_use = millis(); // log usage
