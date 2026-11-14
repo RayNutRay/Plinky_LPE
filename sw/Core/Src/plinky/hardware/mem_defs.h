@@ -154,6 +154,10 @@ static u16 get_midi_out_clock_div(void) {
 	return sys_params.midi_out_clock_div;
 }
 
+static u16 get_midi_out_notes_off(void) {
+	return sys_params.midi_out_notes_off;
+}
+
 typedef u16 (*SysParamGetter)(void);
 
 const SysParamGetter sys_param_getters[] = {
@@ -195,6 +199,7 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_TOUCH_STABLE_TICKS] = get_touch_stable_ticks,
     [SYS_TOUCH_STABLE_RANGE] = get_touch_stable_range,
     [SYS_MIDI_OUT_CLOCK_DIV] = get_midi_out_clock_div,
+    [SYS_MIDI_OUT_NOTES_OFF] = get_midi_out_notes_off,
 };
 
 // sys param setters
@@ -358,6 +363,10 @@ static void set_midi_out_clock_div(u16 value) {
 	sys_params.midi_out_clock_div = value;
 }
 
+static void set_midi_out_notes_off(u16 value) {
+	sys_params.midi_out_notes_off = value;
+}
+
 typedef void (*SysParamSetter)(u16);
 
 const SysParamSetter sys_param_setters[] = {
@@ -399,6 +408,7 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_TOUCH_STABLE_TICKS] = set_touch_stable_ticks,
     [SYS_TOUCH_STABLE_RANGE] = set_touch_stable_range,
     [SYS_MIDI_OUT_CLOCK_DIV] = set_midi_out_clock_div,
+    [SYS_MIDI_OUT_NOTES_OFF] = set_midi_out_notes_off,
 };
 
 const u8 sys_param_ranges[] = {
@@ -440,6 +450,7 @@ const u8 sys_param_ranges[] = {
     [SYS_TOUCH_STABLE_TICKS] = NUM_TOUCH_STABLE_TICKS,
     [SYS_TOUCH_STABLE_RANGE] = NUM_TOUCH_STABLE_RANGES,
     [SYS_MIDI_OUT_CLOCK_DIV] = NUM_MIDI_OUT_CLOCK_DIVS,
+    [SYS_MIDI_OUT_NOTES_OFF] = 2,
 };
 
 const static GlobalData init_global_data = {
@@ -499,7 +510,8 @@ const static SysParams init_sys_params = {
     .layout_global = false,
     .cv_gate_in_is_pressure = false,
     .reference_pitch = 10, // 440Hz
-    .midi_out_clock_div = 0, // /1, the 24 ppqn of the midi spec
+    .midi_out_clock_div = 0,     // /1, the 24 ppqn of the midi spec
+    .midi_out_notes_off = false, // false means notes are sent
     .touch_stable_ticks_ofs = 0, // default
     .touch_stable_range_ofs = 0, // default
     .version = LPE_SYS_PARAMS_VERSION,

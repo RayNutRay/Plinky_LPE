@@ -306,6 +306,7 @@ typedef enum SysParam {
 	SYS_TOUCH_STABLE_TICKS,
 	SYS_TOUCH_STABLE_RANGE,
 	SYS_MIDI_OUT_CLOCK_DIV,
+	SYS_MIDI_OUT_NOTES_OFF,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
@@ -932,7 +933,11 @@ typedef struct SysParams {
 	u8 midi_string_bend_range_in : 3;
 	u8 midi_string_bend_range_out : 3;
 	// 10 bytes
-	u8 mpe_chans : 6; // values 0-14 represent 1-15 channels
+	u8 mpe_chans : 4; // values 0-14 represent 1-15 channels
+	// mpe_chans never holds more than 14, so two of its six bits were always zero. taking one of them keeps every
+	// field after it where it was, and an existing setting reads the new flag as false - notes keep being sent
+	bool midi_out_notes_off : 1;
+	u8 pad3 : 1;
 	bool midi_soft_thru : 1;
 	bool local_ctrl_off : 1;
 	// 11 bytes
