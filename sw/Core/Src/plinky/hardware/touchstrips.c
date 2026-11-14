@@ -13,6 +13,8 @@ extern TSC_HandleTypeDef htsc;
 
 static u8 touch_frame = 0; // frame counter for touch reading loop
 static u16 strip_touched = 0;
+static u16 strip_pressed = 0;                   // pressure detected, not yet validated as a touch
+static u8 press_start_tick[NUM_TOUCHSTRIPS];    // module_ticks when the current settle attempt started
 
 static TouchCalibData touch_calib_data[NUM_TOUCH_READINGS];
 static Touch touches[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES];  // the touches
@@ -103,26 +105,30 @@ static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
 	u8 cur_tick = module_ticks;
 	u8 pad_y = position >> 8;
 
-	// search backwards through touch history for samples old enough to validate stability
+	// search backwards through touch history, up to the required settle time
 	u8 hist_frame = (touch_frame + 7) & 7;
 	while (hist_frame != touch_frame) {
 		Touch* hist_touch = &touches[touch_id][hist_frame];
 
-		// position out of range or different pad => not stable
-		if (abs(hist_touch->pos - position) > stable_pos_range || (hist_touch->pos >> 8) != pad_y)
+		// position out of range or different pad => not stable, and the finger is still moving, so the settle time
+		// starts over from here
+		if (abs(hist_touch->pos - position) > stable_pos_range || (hist_touch->pos >> 8) != pad_y) {
+			press_start_tick[touch_id] = cur_tick;
 			return false;
+		}
 
-		// within accepted ranges and old enough => stable
+		// checked far enough back
 		if ((u8)(cur_tick - touch_ticks[touch_id][hist_frame]) >= stable_ticks)
-			return true;
+			break;
 
 		// within accepted ranges but not old enough => check previous frame
 		hist_frame = (hist_frame + 7) & 7;
 	}
 
-	// the entire history is within accepted ranges, this is as stable as we can measure - a long stable_ticks setting
-	// can ask for more time than the history holds, without this a touch would then never be recognized
-	return true;
+	// the position held still for as much of the settle time as the history reaches. the history is only eight frames
+	// deep - 24 ticks when nothing else is touched, around 100 when every strip is - so for anything longer the time
+	// is measured from the frame the pressure appeared in instead, otherwise the setting would silently cap out
+	return (u8)(cur_tick - press_start_tick[touch_id]) >= stable_ticks;
 }
 
 static void process_reading(u8 reading_id) {
@@ -196,6 +202,14 @@ static void process_reading(u8 reading_id) {
 	bool was_touching = (strip_touched & mask) != 0;
 	// pressure hysteresis
 	bool is_touching = calib_pres > (was_touching ? 0 : 100);
+
+	// track when the pressure appeared, so the settle time is measured from the start of the press
+	if (!is_touching)
+		strip_pressed &= ~mask;
+	else if (!(strip_pressed & mask)) {
+		strip_pressed |= mask;
+		press_start_tick[touch_id] = module_ticks;
+	}
 
 	// check stability on new touches
 	bool is_valid_touch = is_touching && (was_touching || touch_stable(touch_id, calib_pres, calib_pos));
