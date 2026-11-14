@@ -14,11 +14,11 @@ extern TSC_HandleTypeDef htsc;
 static u8 touch_frame = 0; // frame counter for touch reading loop
 static u16 strip_touched = 0;
 static u16 strip_pressed = 0;                   // pressure detected, not yet validated as a touch
-static u8 press_start_tick[NUM_TOUCHSTRIPS];    // module_ticks when the current settle attempt started
+static u16 press_start_tick[NUM_TOUCHSTRIPS];   // module_ticks when the current settle attempt started
 
 static TouchCalibData touch_calib_data[NUM_TOUCH_READINGS];
 static Touch touches[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES];  // the touches
-static u8 module_ticks = 0;                               // tracking ticks for the module
+static u16 module_ticks = 0;                              // tracking ticks for the module
 static u8 touch_ticks[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES]; // module_ticks timestamp for each touch
 static u16 sensor_val[2 * NUM_TOUCH_READINGS];            // current value (range 0 - 65027)
 static u16 sensor_min[2 * NUM_TOUCH_READINGS];            // lifetime low
@@ -99,10 +99,10 @@ void fill_latch(u8 strip_id, LatchTouch* latch_touch) {
 // == MAIN == //
 
 static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
-	u8 stable_ticks_index = get_sys_param(SYS_TOUCH_STABLE_TICKS);
-	u8 stable_ticks = TOUCH_STABLE_TICKS(stable_ticks_index);
+	u16 stable_ticks = touch_stable_ticks[get_sys_param(SYS_TOUCH_STABLE_TICKS)];
 	u8 stable_pos_range = TOUCH_STABLE_RANGE(get_sys_param(SYS_TOUCH_STABLE_RANGE));
-	u8 cur_tick = module_ticks;
+	// the history timestamps are u8 and never reach back further than eight frames, so they are compared in u8
+	u8 cur_tick = (u8)module_ticks;
 	u8 pad_y = position >> 8;
 
 	// search backwards through touch history, up to the required settle time
@@ -113,7 +113,7 @@ static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
 		// position out of range or different pad => not stable, and the finger is still moving, so the settle time
 		// starts over from here
 		if (abs(hist_touch->pos - position) > stable_pos_range || (hist_touch->pos >> 8) != pad_y) {
-			press_start_tick[touch_id] = cur_tick;
+			press_start_tick[touch_id] = module_ticks;
 			return false;
 		}
 
@@ -128,7 +128,7 @@ static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
 	// the position held still for as much of the settle time as the history reaches. the history is only eight frames
 	// deep - 24 ticks when nothing else is touched, around 100 when every strip is - so for anything longer the time
 	// is measured from the frame the pressure appeared in instead, otherwise the setting would silently cap out
-	return (u8)(cur_tick - press_start_tick[touch_id]) >= stable_ticks;
+	return (u16)(module_ticks - press_start_tick[touch_id]) >= stable_ticks;
 }
 
 static void process_reading(u8 reading_id) {
@@ -229,7 +229,7 @@ static void process_reading(u8 reading_id) {
 	// save results to touch
 	touches[touch_id][touch_frame].pres = calib_pres;
 	touches[touch_id][touch_frame].pos = calib_pos;
-	touch_ticks[touch_id][touch_frame] = module_ticks;
+	touch_ticks[touch_id][touch_frame] = (u8)module_ticks; // only ever compared within the eight frame history
 
 	// sensor value has been read
 	read_this_frame |= 1 << touch_id;

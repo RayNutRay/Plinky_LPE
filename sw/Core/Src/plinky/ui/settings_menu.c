@@ -399,7 +399,7 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return val_buf;
 	// how long a new touch needs to hold its position, a tick is 2ms
 	case I_TOUCH_STABLE_TICKS:
-		sprintf(val_buf, "%dms", 2 * TOUCH_STABLE_TICKS(value));
+		sprintf(val_buf, "%dms", 2 * touch_stable_ticks[value]);
 		return val_buf;
 	// midi clock out divider, shown with the resulting pulses per quarter note
 	case I_MIDI_OUT_CLOCK_DIV:
