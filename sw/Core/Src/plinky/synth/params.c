@@ -942,7 +942,9 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 		break;
 	default:
 		// these params are on a (+/-) 100.0 scale, every encoder tick (before acceleration) changes 0.1 exactly
-		s8 pos = raw & 127;
+		// no mask: raw is signed and runs to +/-1024, so masking made the negative cases unreachable and matched
+		// every value with the same low 7 bits (129, 171, 214, ...) instead of just the six seams
+		s16 pos = raw;
 		if (pos == 1 || pos == 43 || pos == 86 || pos == -42 || pos == -85 || pos == -127)
 			raw += enc_diff > 0 ? 1 : -1;
 		break;
