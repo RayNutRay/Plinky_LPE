@@ -10,14 +10,13 @@ Workflow:
     5. ./plinky_bank.py verify PRESETS_new.UF2 --against bank.json
     6. rename to PRESETS.UF2 and drag onto the PLINKY drive
 
-WARNING - firmware compatibility:
-    This targets the Preset layout of LPE v0.4.0 (main): params[96][8] + 16 tail bytes
-    = 1552 bytes. On the branch build/personal (v0.4.2c) Preset is 2016 bytes, because
-    multi_params[33][7] + 2 padding bytes were appended. Reading works there (the first
-    1552 bytes have the same layout), but `build` would write those trailing bytes back
-    as zeroes and wipe every per-string value in the bank. Do NOT run `build` against a
-    0.4.2c bank until this tool carries the full payload through instead of re-encoding
-    a preset from scratch.
+Firmware compatibility:
+    The readable part of a preset is the v0.4.0 layout: params[96][8] + 16 tail bytes
+    = 1552 bytes. Newer firmware appends to it - 0.4.2c has multi_params[33][7] + 2
+    padding bytes, making Preset 2016 bytes - and the offsets before that are unchanged,
+    so the json describes either. Everything past the 1552 bytes is carried through
+    verbatim in `_rest_b64` and written back untouched, so `build` cannot silently drop
+    the per-string values of a newer bank. Delete `_rest_b64` from a slot to clear them.
 
 Format reverse-engineered from the LPE firmware sources:
     sw/Core/Src/plinky/hardware/memory.c   (flash journal, PageFooter, hash)
@@ -180,6 +179,7 @@ def decode_preset(buf: bytes) -> dict:
         row = vals[pid * 8:(pid + 1) * 8]
         if any(row):
             params[pname] = {MOD_SRC[s]: v for s, v in enumerate(row) if v}
+    rest = buf[PRESET_SIZE:]
     tail = buf[1536:1552]
     name = bytes(tail[8:16]).split(b"\x00")[0].decode("latin-1").rstrip()
     cat = tail[7]
@@ -190,6 +190,9 @@ def decode_preset(buf: bytes) -> dict:
         "preset_version": tail[6],
         "seq_start": tail[1], "seq_len": tail[2],
         "_tail_hex": tail.hex(),     # lossless: pad/paddy bytes preserved
+        # whatever a newer firmware appended to Preset (0.4.2c: multi_params). not decoded, only carried through, so
+        # that rebuilding a bank from this json cannot wipe it
+        **({"_rest_b64": base64.b64encode(rest).decode()} if any(b != 0xFF for b in rest) else {}),
         "params": params,
     }
 
@@ -217,12 +220,17 @@ def encode_preset(d: dict) -> bytes:
     tail[7] = int(cat) & 0xFF
     nm = d.get("name", "").encode("latin-1")[:8]
     tail[8:16] = nm + b"\x00" * (8 - len(nm))
-    return struct.pack("<768h", *vals) + bytes(tail)
+    rest = base64.b64decode(d["_rest_b64"]) if d.get("_rest_b64") else b""
+    if len(rest) > PAGE_USABLE - PRESET_SIZE:
+        raise SystemExit(f"slot {d.get('slot')}: _rest_b64 holds {len(rest)} bytes, more than a page fits")
+    return struct.pack("<768h", *vals) + bytes(tail) + rest
 
 # ------------------------------------------------------------- page writing --
 
 def make_page(idx: int, payload: bytes, sys_params: bytes, seq: int) -> bytes:
-    body = bytearray(b"\x00" * PAGE_USABLE)
+    # the firmware erases the page and then writes sizeof(item) bytes, so everything past the item
+    # stays erased. filling the same way keeps a rebuilt page byte-identical to one the device wrote
+    body = bytearray(b"\xff" * PAGE_USABLE)
     body[:len(payload)] = payload
     raw = bytearray(body + sys_params)
     assert len(raw) == HASH_LEN
@@ -291,6 +299,7 @@ def cmd_dump(args):
             "patterns_found": sum(1 for i in latest if item_kind(i) == "pattern_qtr"),
             "samples_found": sum(1 for i in latest if item_kind(i) == "sample_info"),
             "bad_crc_pages": bad,
+            "presets_with_appended_data": sum(1 for p in presets if p.get("_rest_b64")),
         },
         "presets": presets,
     }
@@ -339,7 +348,8 @@ def cmd_verify(args):
             if pg is None:
                 errs.append(f"slot {slot+1}: missing in image")
                 continue
-            if pg.payload[:PRESET_SIZE] != encode_preset(p):
+            enc = encode_preset(p)
+            if pg.payload[:len(enc)] != enc or any(b != 0xFF for b in pg.payload[len(enc):]):
                 errs.append(f"slot {slot+1}: content differs from json")
     print(f"{args.image}: {len(latest)} live items, "
           f"{sum(1 for i in latest if item_kind(i)=='preset')} presets")
