@@ -60,7 +60,7 @@ MOD_SRC = ["base", "env2", "pres", "A", "B", "X", "Y", "rnd"]
 PARAM_ROWS = [
     ("Sound 1",  ["P_SHAPE","P_DISTORTION","P_PITCH","P_OCT","P_GLIDE","P_INTERVAL"]),
     ("Sound 2",  ["P_NOISE","P_RESO","P_DEGREE","P_SCALE","P_MICROTONE","P_COLUMN"]),
-    ("Env 1",    ["P_ENV_LVL1","P_ATTACK1","P_DECAY1","P_SUSTAIN1","P_RELEASE1","P_ENV1_UNUSED"]),
+    ("Env 1",    ["P_ENV_LVL1","P_ATTACK1","P_DECAY1","P_SUSTAIN1","P_RELEASE1","P_ROOT"]),
     ("Env 2",    ["P_ENV_LVL2","P_ATTACK2","P_DECAY2","P_SUSTAIN2","P_RELEASE2","P_ENV2_UNUSED"]),
     ("Delay",    ["P_DLY_SEND","P_DLY_TIME","P_PING_PONG","P_DLY_WOBBLE","P_DLY_FEEDBACK","P_TEMPO"]),
     ("Reverb",   ["P_RVB_SEND","P_RVB_TIME","P_SHIMMER","P_RVB_WOBBLE","P_RVB_UNUSED","P_SWING"]),
@@ -72,12 +72,16 @@ PARAM_ROWS = [
     ("LFO B",    ["P_B_SCALE","P_B_OFFSET","P_B_DEPTH","P_B_RATE","P_B_SHAPE","P_B_SYM"]),
     ("LFO X",    ["P_X_SCALE","P_X_OFFSET","P_X_DEPTH","P_X_RATE","P_X_SHAPE","P_X_SYM"]),
     ("LFO Y",    ["P_Y_SCALE","P_Y_OFFSET","P_Y_DEPTH","P_Y_RATE","P_Y_SHAPE","P_Y_SYM"]),
-    ("Mixer 1",  ["P_SYN_LVL","P_SYN_WET_DRY","P_HPF","P_MIX_UNUSED1","P_MIX_UNUSED4","P_VOLUME"]),
-    ("Mixer 2",  ["P_IN_LVL","P_IN_WET_DRY","P_SYS_UNUSED1","P_MIX_UNUSED2","P_MIX_UNUSED3","P_MIX_WIDTH"]),
+    ("Mixer 1",  ["P_SYN_LVL","P_SYN_WET_DRY","P_HPF","P_MIX_UNUSED1","P_SETTINGS1","P_VOLUME"]),
+    ("Mixer 2",  ["P_IN_LVL","P_IN_WET_DRY","P_SYS_UNUSED1","P_MIX_UNUSED2","P_SETTINGS2","P_MIX_WIDTH"]),
 ]
 PARAM_NAMES = [p for _, row in PARAM_ROWS for p in row]
 assert len(PARAM_NAMES) == 96
 PARAM_ID = {n: i for i, n in enumerate(PARAM_NAMES)}
+# the names these three slots carried before they were put to use, so an older json still builds
+PARAM_ID.update({"P_ENV1_UNUSED": PARAM_ID["P_ROOT"],
+                 "P_MIX_UNUSED4": PARAM_ID["P_SETTINGS1"],
+                 "P_MIX_UNUSED3": PARAM_ID["P_SETTINGS2"]})
 
 CATEGORIES = ["", "Bass", "Leads", "Pads", "Arps", "Plinks", "Plonks", "Beeps", "Boops",
               "SFX", "Line-In", "Sampler", "Donk", "Jolly", "Sadness", "Wild", "Gnarly", "Weird"]
