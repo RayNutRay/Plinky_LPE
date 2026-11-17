@@ -117,16 +117,14 @@ per `idx` wins; idx 0-31 presets, 32-127 pattern quarters, 128-135 sample infos,
 136 floating preset, 137-140 floating pattern. Page 255 is calibration and lies
 outside the writable window, so it cannot be damaged.
 
-The layout is read from the preset version byte in the bank: 2 (OG) and 16
-(0.4.0) are 1552 bytes, 17 (0.4.2c) is 2016 - `params[96][8]` (1536) + 16 tail
-bytes at the same offsets + `multi_params[33][7]` (462) + 2 padding. Per-string
-values are decoded as named rows (`MP_*`, strings 2-8; string 1 lives in
-`params[...]["base"]`), and anything not decoded is carried through verbatim, so
-an unknown version round-trips as well. Building a json onto a base image of a
-different layout is refused unless `--force-layout` is passed.
-
-`tools/test_plinky_bank.py` checks all of this against synthetic banks and needs
-no hardware.
+`build` is safe on both layouts now. The json describes the v0.4.0 part
+(`params[96][8]` + 16 tail bytes, same offsets everywhere); anything a newer
+firmware appended - 0.4.2c has `multi_params[33][7]` + 2 padding, making `Preset`
+2016 bytes - is carried through verbatim in `_rest_b64` and written back
+untouched. Delete `_rest_b64` from a slot to clear its per-string values.
+A rebuilt page is byte-identical to one the device wrote: the page is filled with
+0xff, like an erased flash page, and only the item itself is written over it.
+Verified against synthetic banks of both layouts (dump -> build -> verify).
 
 ## Preset layout plan (32 slots)
 

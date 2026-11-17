@@ -727,6 +727,11 @@ static void cue_midi_out(void) {
 		}
 	}
 
+	// nothing below this point is a clock or a transport message. with the note stream switched off plinky is a
+	// clock master and nothing else, and the 16 byte uart buffer stays free for the pulses
+	if (sys_params.midi_out_notes_off)
+		return;
+
 	// send string data, breaks if:
 	// - midi out buffer full
 	// - any midi was sent for a string (gives space to send realtime data next tick)

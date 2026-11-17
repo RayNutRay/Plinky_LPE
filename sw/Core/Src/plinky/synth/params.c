@@ -942,9 +942,12 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 		break;
 	default:
 		// these params are on a (+/-) 100.0 scale, every encoder tick (before acceleration) changes 0.1 exactly
-		// no mask: raw is signed and runs to +/-1024, so masking made the negative cases unreachable and matched
-		// every value with the same low 7 bits (129, 171, 214, ...) instead of just the six seams
-		s16 pos = raw;
+		// the mask is deliberate: it repeats the correction every 128 raw, so three extra steps per 128 make a tick
+		// worth 131/128 = 1.0234 raw, which is the 1.024 that 1024 raw = 100.0 asks for. it also folds negative
+		// values onto the positive seams (-42 & 127 = 86, -85 -> 43, -127 -> 1), so the negative entries below are
+		// dead code, not a missing case. without the mask the correction only fires six times in the whole range
+		// and the parameter tops out around 97.9 instead of 100.0
+		s8 pos = raw & 127;
 		if (pos == 1 || pos == 43 || pos == 86 || pos == -42 || pos == -85 || pos == -127)
 			raw += enc_diff > 0 ? 1 : -1;
 		break;
