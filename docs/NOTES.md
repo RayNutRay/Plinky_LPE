@@ -117,11 +117,16 @@ per `idx` wins; idx 0-31 presets, 32-127 pattern quarters, 128-135 sample infos,
 136 floating preset, 137-140 floating pattern. Page 255 is calibration and lies
 outside the writable window, so it cannot be damaged.
 
-**The tool targets the v0.4.0 layout and must not run `build` against a 0.4.2c
-bank yet.** There `Preset` is 2016 bytes: `params[96][8]` (1536) + 16 tail bytes
-(same offsets) + `multi_params[33][7]` (462) + 2 padding. `build` re-encodes a
-preset from scratch and would write the appended per-string values back as
-zeroes. It must carry the full payload through and patch only what changes.
+The layout is read from the preset version byte in the bank: 2 (OG) and 16
+(0.4.0) are 1552 bytes, 17 (0.4.2c) is 2016 - `params[96][8]` (1536) + 16 tail
+bytes at the same offsets + `multi_params[33][7]` (462) + 2 padding. Per-string
+values are decoded as named rows (`MP_*`, strings 2-8; string 1 lives in
+`params[...]["base"]`), and anything not decoded is carried through verbatim, so
+an unknown version round-trips as well. Building a json onto a base image of a
+different layout is refused unless `--force-layout` is passed.
+
+`tools/test_plinky_bank.py` checks all of this against synthetic banks and needs
+no hardware.
 
 ## Preset layout plan (32 slots)
 
