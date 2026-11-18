@@ -69,6 +69,37 @@ Open question: make this a third state of the clock icon in `Filter 1`
 - Plinky sends per-string CC 32-39 (finger position) and CC 40-47 (pressure),
   which FRASIL can MIDI-learn (hold GLO, move the control, up to 8 bindings).
 
+### FM-1 TRS jack: MIDI IN only (checked 16.11.2026, from code and community docs, no board opened)
+
+Question asked: can the FM-1's 3.5 mm jack be flipped to MIDI OUT in firmware? No.
+
+- Firmware side, `styvesgoupil/fm1-base` (FRASIL's platform), `include/plat.h`:
+  `enum { PORT_USB, PORT_BLE, PORT_TRS, NPORTS }`, but only `TO_USB` and `TO_BLE`
+  masks exist - "the TRS jack (in only: the FM-1 has no MIDI out jack)".
+  `device/midi_uart.c` + felucca-bsp `chip/fm1_uart.h`: UART1 is set up RX-only,
+  IOMAP input channel 1 = PH8, 31250 baud, RX DMA. No TX path anywhere.
+- M-VAVE's own SDK (`m-vave/fm1_open`, `sdk/include/fm1_device.h`) calls it
+  "the fitted TRS MIDI **receiver**"; `fm1_midi_output_ports()` returns a DIN bit
+  only on boards that have the jack (SMK-37), not on the FM-1.
+- Chip vs board: on the AC7911B die pin 19 carries both PH8 (UART1 RX) and PH7
+  (UART1_TXA), so the SoC could transmit there; the FM-1 PCB wires the jack
+  through an input opto/buffer that only passes signal inwards (aroum/fm1-custom-fw
+  `REVERSE_ENGINEERING.md`). Nobody has verified this with a meter yet -
+  `kmplngj/Felucca` issue #288 is still open and warns not to drive that pin as an
+  output before the wiring is proven.
+- FRASIL 3.3.1 (13.11.2026) did add a MIDI track, but it sends on `TO_USB` only -
+  USB on the FM-1, plus the physical MIDI OUT socket on the SMK-37. `TO_BLE` is not
+  used anywhere in FRASIL's app code, so even BLE out would need a firmware change.
+- Without soldering, FM-1 can only send MIDI over USB (device mode, or USB host mode -
+  it supplies no bus power) or BLE MIDI.
+- With soldering: Harvie's mod, his fork `Harvie/fm1-x0x`. Its HAL bit-bangs 31250 8N1
+  on **PB5** (the speaker amp enable, R97 removed) into a new jack, with a 74LVC1G07
+  buffer. The firmware hub describes this mod as "pin 39 / PD6" - the code says PB5,
+  trust the code.
+
+So in the Pamela -> Plinky -> FM-1 chain the FM-1 stays the last link unless it goes
+out over USB/BLE or gets modded.
+
 ## Bug: right encoder drops one step
 
 Reported: after using the clicky right encoder, on release the value jumps one
