@@ -112,6 +112,45 @@ def cmd_dump(args):
           f"{named} named  ->  {args.out}")
 
 
+
+# ----------------------------------------------------------- index helpers --
+
+SYNC_DIVS_32NDS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40,
+                   48, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512, 640, 768, 1024]
+
+
+def div_to_index(spec: str) -> int:
+    """'1/8', '3/16', '1bar', '2bars' -> index into SYNC_DIVS_32NDS"""
+    spec = spec.strip().lower().replace(" ", "")
+    if spec.endswith("bars"):
+        n32 = int(spec[:-4]) * 32
+    elif spec.endswith("bar"):
+        n32 = int(spec[:-3]) * 32
+    elif "/" in spec:
+        num, den = (int(x) for x in spec.split("/", 1))
+        if 32 * num % den:
+            sys.exit(f"{spec} is not a whole number of 32nds")
+        n32 = 32 * num // den
+    else:
+        sys.exit(f"cannot read a division out of {spec!r} (try 1/8, 3/16, 1bar)")
+    if n32 not in SYNC_DIVS_32NDS:
+        sys.exit(f"{spec} = {n32}/32 is not one of the divisions plinky offers")
+    return SYNC_DIVS_32NDS.index(n32)
+
+
+def index_to_percent(index: int, rng: int) -> float:
+    """INDEX_TO_RAW from utils.h: the lowest raw that lands fully inside the index"""
+    raw = (abs(index) * 1024 + rng - 1) // rng
+    return raw * 100 / pb.RAW_FULL
+
+
+# the ranges this tool needs to turn an index into a value; see param_defs.h
+PARAM_RANGE = {
+    "P_SEQ_CLK_DIV": len(SYNC_DIVS_32NDS) + 1,   # + "Gate cv"
+    "P_ARP_CLK_DIV": len(SYNC_DIVS_32NDS),
+    "P_DLY_TIME": len(SYNC_DIVS_32NDS),
+}
+
 # ---------------------------------------------------------------- batch set --
 
 NUM_MOD_SOURCES = 8
@@ -144,6 +183,7 @@ def parse_slots(spec: str):
 
 
 def cmd_set(args):
+    args.percent = resolve_percent(args.param, args.percent, args.index, args.div)
     offset = param_offset(args.param, args.src)
     raw = max(-pb.RAW_FULL, min(pb.RAW_FULL, round(args.percent * pb.RAW_FULL / 100)))
     slots = parse_slots(args.slots)
@@ -183,6 +223,79 @@ def cmd_set(args):
     print(f"{len(changes)} slots written and verified")
 
 
+
+def resolve_percent(param: str, percent=None, index=None, div=None) -> float:
+    given = [x for x in (percent, index, div) if x is not None]
+    if len(given) != 1:
+        sys.exit("give exactly one of a percent, --index or --div")
+    if percent is not None:
+        return float(percent)
+    if div is not None:
+        index = div_to_index(div)
+    if param not in PARAM_RANGE:
+        sys.exit(f"no index range known for {param}; use a percent")
+    return index_to_percent(int(index), PARAM_RANGE[param])
+
+
+def plan_change(plinky, param: str, src: str, percent: float, slots):
+    """returns (offset, raw, [(slot, current_raw)]) without writing anything"""
+    offset = param_offset(param, src)
+    raw = max(-pb.RAW_FULL, min(pb.RAW_FULL, round(percent * pb.RAW_FULL / 100)))
+    changes = []
+    for slot in slots:
+        cur = struct.unpack("<h", plinky.read_range(slot, offset, 2))[0]
+        if cur != raw:
+            changes.append((slot, cur))
+    return offset, raw, changes
+
+
+def write_change(plinky, offset: int, raw: int, changes):
+    payload = struct.pack("<h", raw)
+    failed = []
+    for slot, _ in changes:
+        plinky.write_range(slot, offset, payload)
+        for _ in range(20):
+            time.sleep(0.05)
+            if struct.unpack("<h", plinky.read_range(slot, offset, 2))[0] == raw:
+                break
+        else:
+            failed.append(slot + 1)
+    return failed
+
+
+def cmd_apply(args):
+    """a recipe is a json list of {param, src, slots, and one of percent / index / div}"""
+    recipe = json.loads(Path(args.recipe).read_text(encoding="utf-8"))
+    if isinstance(recipe, dict):
+        recipe = recipe.get("steps", [])
+    plinky = Plinky()
+    planned = []
+    for step in recipe:
+        param, src = step["param"], step.get("src", "base")
+        percent = resolve_percent(param, step.get("percent"), step.get("index"), step.get("div"))
+        slots = parse_slots(str(step.get("slots", "1-32")))
+        offset, raw, changes = plan_change(plinky, param, src, percent, slots)
+        label = step.get("div") or (f"index {step['index']}" if "index" in step else f"{percent:+g}%")
+        print(f"{param:<16} {src:<4} -> {label:<10} "
+              f"{len(changes)} of {len(slots)} slots change")
+        for slot, cur in changes:
+            print(f"      slot {slot + 1:2}: {cur * 100 / pb.RAW_FULL:+7.1f}%  ->  {raw * 100 / pb.RAW_FULL:+.1f}%")
+        planned.append((offset, raw, changes))
+    total = sum(len(c) for _, _, c in planned)
+    print()
+    if not total:
+        print("nothing to change")
+        return
+    if not args.write:
+        print(f"{total} writes in total. Re-run with --write to apply.")
+        return
+    failed = []
+    for offset, raw, changes in planned:
+        failed += write_change(plinky, offset, raw, changes)
+    if failed:
+        sys.exit(f"did not read back as written in slots: {sorted(set(failed))}")
+    print(f"{total} writes applied and verified")
+
 def cmd_show(args):
     for slot, buf in sorted(read_bank(Plinky()).items()):
         d = pb.decode_preset(buf + b"\xff" * (pb.PAGE_USABLE - len(buf)))
@@ -200,10 +313,16 @@ def main():
     st = sub.add_parser("set", help="set one mod depth across slots (dry run unless --write)")
     st.add_argument("param", help="parameter name, e.g. P_DISTORTION")
     st.add_argument("src", help=f"mod source: {', '.join(pb.MOD_SRC)}")
-    st.add_argument("percent", type=float, help="depth in percent, -100..100")
+    st.add_argument("percent", type=float, nargs="?", help="depth in percent, -100..100")
+    st.add_argument("--index", type=int, help="index value instead of a percent")
+    st.add_argument("--div", help="clock division instead of a percent, e.g. 1/8 or 3/16")
     st.add_argument("--slots", default="1-32", help="e.g. 1-24 or 1,5,9 (default all)")
     st.add_argument("--write", action="store_true", help="actually write (otherwise dry run)")
     st.set_defaults(func=cmd_set)
+    ap_ = sub.add_parser("apply", help="run a json recipe of set steps in one pass")
+    ap_.add_argument("recipe")
+    ap_.add_argument("--write", action="store_true", help="actually write (otherwise dry run)")
+    ap_.set_defaults(func=cmd_apply)
     s = sub.add_parser("show", help="one line per slot")
     s.set_defaults(func=cmd_show)
     args = ap.parse_args()

@@ -1,0 +1,8 @@
+{
+  "_note": "One rhythmic grid for the whole bank. Sequencer at a quarter, arp at a sixteenth, no swing. Slots and values are meant to be edited before use.",
+  "steps": [
+    { "param": "P_SEQ_CLK_DIV", "src": "base", "div": "1/4",  "slots": "1-32" },
+    { "param": "P_ARP_CLK_DIV", "src": "base", "div": "1/16", "slots": "1-32" },
+    { "param": "P_SWING",       "src": "base", "percent": 0,  "slots": "1-32" }
+  ]
+}
