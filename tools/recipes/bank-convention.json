@@ -1,5 +1,5 @@
 {
-  "_note": "One grid and one key for the whole bank, and the accelerometer left in charge of X and Y. Slots 25-32 are the hand tuned sampler presets; the X/Y steps skip them because they are already set that way.",
+  "_note": "One grid and one key for the whole bank, and the accelerometer left in charge of X and Y. The X/Y steps skip the hand tuned sampler presets in 25-32, which are already set that way, and Daylight (6), Laser (21) and Smile (26, 27), where those lfos are doing musical work worth keeping.",
   "steps": [
     { "param": "P_SEQ_CLK_DIV", "src": "base", "div": "1/4",  "slots": "1-32" },
     { "param": "P_ARP_CLK_DIV", "src": "base", "div": "1/16", "slots": "1-32" },
@@ -8,13 +8,13 @@
     { "param": "P_SCALE",       "src": "base", "index": 1,    "slots": "1-32" },
     { "param": "P_ROOT",        "src": "base", "index": 0,    "slots": "1-32" },
 
-    { "param": "P_X_DEPTH",     "src": "base", "percent": 0,  "slots": "1-24" },
-    { "param": "P_Y_DEPTH",     "src": "base", "percent": 0,  "slots": "1-24" },
-    { "param": "P_X_OFFSET",    "src": "base", "percent": 0,  "slots": "1-24" },
-    { "param": "P_Y_OFFSET",    "src": "base", "percent": 0,  "slots": "1-24" },
-    { "param": "P_X_SHAPE",     "src": "base", "index": 0,    "slots": "1-24" },
-    { "param": "P_Y_SHAPE",     "src": "base", "index": 0,    "slots": "1-24" },
-    { "param": "P_X_SCALE",     "src": "base", "percent": 50, "slots": "1-24" },
-    { "param": "P_Y_SCALE",     "src": "base", "percent": 50, "slots": "1-24" }
+    { "param": "P_X_DEPTH",     "src": "base", "percent": 0,  "slots": "1-5,7-20,22-24" },
+    { "param": "P_Y_DEPTH",     "src": "base", "percent": 0,  "slots": "1-5,7-20,22-24" },
+    { "param": "P_X_OFFSET",    "src": "base", "percent": 0,  "slots": "1-5,7-20,22-24" },
+    { "param": "P_Y_OFFSET",    "src": "base", "percent": 0,  "slots": "1-5,7-20,22-24" },
+    { "param": "P_X_SHAPE",     "src": "base", "index": 0,    "slots": "1-5,7-20,22-24" },
+    { "param": "P_Y_SHAPE",     "src": "base", "index": 0,    "slots": "1-5,7-20,22-24" },
+    { "param": "P_X_SCALE",     "src": "base", "percent": 50, "slots": "1-5,7-20,22-24" },
+    { "param": "P_Y_SCALE",     "src": "base", "percent": 50, "slots": "1-5,7-20,22-24" }
   ]
 }
