@@ -50,7 +50,8 @@ NUM_PTN_QUARTERS = NUM_PATTERNS * 4                 # 96
 F_SAMPLES_START  = PATTERNS_START + NUM_PTN_QUARTERS  # 128
 FLOAT_PRESET_ID  = F_SAMPLES_START + NUM_SAMPLES      # 136
 FLOAT_PATTERN_ID = FLOAT_PRESET_ID + 1                # 137
-NUM_FLASH_ITEMS  = FLOAT_PATTERN_ID + 4               # 141
+GLOBAL_DATA_ID   = FLOAT_PATTERN_ID + 4               # 141
+NUM_FLASH_ITEMS  = GLOBAL_DATA_ID + 1                 # 142
 
 PRESET_SIZE = 96 * 8 * 2 + 16   # params[96][8] + 16 tail bytes = 1552
 RAW_FULL = 1024                 # raw param scale: +-1024 == +-100.0%
@@ -60,7 +61,7 @@ MOD_SRC = ["base", "env2", "pres", "A", "B", "X", "Y", "rnd"]
 PARAM_ROWS = [
     ("Sound 1",  ["P_SHAPE","P_DISTORTION","P_PITCH","P_OCT","P_GLIDE","P_INTERVAL"]),
     ("Sound 2",  ["P_NOISE","P_RESO","P_DEGREE","P_SCALE","P_MICROTONE","P_COLUMN"]),
-    ("Env 1",    ["P_ENV_LVL1","P_ATTACK1","P_DECAY1","P_SUSTAIN1","P_RELEASE1","P_ENV1_UNUSED"]),
+    ("Env 1",    ["P_ENV_LVL1","P_ATTACK1","P_DECAY1","P_SUSTAIN1","P_RELEASE1","P_ROOT"]),
     ("Env 2",    ["P_ENV_LVL2","P_ATTACK2","P_DECAY2","P_SUSTAIN2","P_RELEASE2","P_ENV2_UNUSED"]),
     ("Delay",    ["P_DLY_SEND","P_DLY_TIME","P_PING_PONG","P_DLY_WOBBLE","P_DLY_FEEDBACK","P_TEMPO"]),
     ("Reverb",   ["P_RVB_SEND","P_RVB_TIME","P_SHIMMER","P_RVB_WOBBLE","P_RVB_UNUSED","P_SWING"]),
@@ -72,8 +73,8 @@ PARAM_ROWS = [
     ("LFO B",    ["P_B_SCALE","P_B_OFFSET","P_B_DEPTH","P_B_RATE","P_B_SHAPE","P_B_SYM"]),
     ("LFO X",    ["P_X_SCALE","P_X_OFFSET","P_X_DEPTH","P_X_RATE","P_X_SHAPE","P_X_SYM"]),
     ("LFO Y",    ["P_Y_SCALE","P_Y_OFFSET","P_Y_DEPTH","P_Y_RATE","P_Y_SHAPE","P_Y_SYM"]),
-    ("Mixer 1",  ["P_SYN_LVL","P_SYN_WET_DRY","P_HPF","P_MIX_UNUSED1","P_MIX_UNUSED4","P_VOLUME"]),
-    ("Mixer 2",  ["P_IN_LVL","P_IN_WET_DRY","P_SYS_UNUSED1","P_MIX_UNUSED2","P_MIX_UNUSED3","P_MIX_WIDTH"]),
+    ("Mixer 1",  ["P_SYN_LVL","P_SYN_WET_DRY","P_HPF","P_MIX_UNUSED1","P_SETTINGS1","P_VOLUME"]),
+    ("Mixer 2",  ["P_IN_LVL","P_IN_WET_DRY","P_SYS_UNUSED1","P_MIX_UNUSED2","P_SETTINGS2","P_MIX_WIDTH"]),
 ]
 PARAM_NAMES = [p for _, row in PARAM_ROWS for p in row]
 assert len(PARAM_NAMES) == 96
@@ -96,7 +97,8 @@ def item_kind(idx: int) -> str:
     if idx < F_SAMPLES_START:           return "pattern_qtr"
     if idx < FLOAT_PRESET_ID:           return "sample_info"
     if idx == FLOAT_PRESET_ID:          return "float_preset"
-    if idx < NUM_FLASH_ITEMS:           return "float_pattern_qtr"
+    if idx < GLOBAL_DATA_ID:            return "float_pattern_qtr"
+    if idx == GLOBAL_DATA_ID:           return "global_data"
     return "unknown"
 
 # ------------------------------------------------------------------ uf2 i/o --

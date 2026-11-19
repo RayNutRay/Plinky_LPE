@@ -149,7 +149,44 @@ PARAM_RANGE = {
     "P_SEQ_CLK_DIV": len(SYNC_DIVS_32NDS) + 1,   # + "Gate cv"
     "P_ARP_CLK_DIV": len(SYNC_DIVS_32NDS),
     "P_DLY_TIME": len(SYNC_DIVS_32NDS),
+    "P_SCALE": 27,          # NUM_SCALES; 0 Major, 1 Minor, 2 Harmonic minor, ...
+    "P_ROOT": 12,           # 0 = C
+    "P_X_SHAPE": 11,        # NUM_LFO_SHAPES
+    "P_Y_SHAPE": 11,
+    "P_A_SHAPE": 11,
+    "P_B_SHAPE": 11,
 }
+
+
+# ------------------------------------------------------- multi timbral base --
+
+# MultiParam order from defs.h. For these 33 parameters the mod depths are shared, but the BASE is
+# split: string 0 lives in params[param][SRC_BASE], strings 1-7 in multi_params[mp][0..6].
+MULTI_PARAMS = [
+    "P_SHAPE", "P_DISTORTION", "P_PITCH", "P_OCT", "P_GLIDE", "P_INTERVAL",
+    "P_NOISE", "P_RESO", "P_DEGREE", "P_SCALE", "P_MICROTONE", "P_COLUMN",
+    "P_ENV_LVL1", "P_ATTACK1", "P_DECAY1", "P_SUSTAIN1", "P_RELEASE1", "P_ROOT",
+    "P_ENV_LVL2", "P_ATTACK2", "P_DECAY2", "P_SUSTAIN2", "P_RELEASE2",
+    "P_ARP_TGL", "P_LATCH_TGL", "P_GATE_LENGTH",
+    "P_SCRUB", "P_GR_SIZE", "P_PLAY_SPD", "P_SMP_STRETCH",
+    "P_SCRUB_JIT", "P_GR_SIZE_JIT", "P_PLAY_SPD_JIT",
+]
+MULTI_ID = {n: i for i, n in enumerate(MULTI_PARAMS)}
+MULTI_BASE = pb.PRESET_SIZE          # 1552: multi_params[33][7] starts right after the v0.4.0 part
+STRINGS_IN_MULTI = 7
+
+
+def multi_offset(param_name: str) -> int:
+    """byte offset of multi_params[mp][0]; the seven strings are contiguous, 14 bytes"""
+    return MULTI_BASE + MULTI_ID[param_name] * STRINGS_IN_MULTI * 2
+
+
+def writes_for(param: str, src: str, raw: int):
+    """every (offset, payload) one logical change needs"""
+    out = [(param_offset(param, src), struct.pack("<h", raw))]
+    if src == "base" and param in MULTI_ID:
+        out.append((multi_offset(param), struct.pack("<h", raw) * STRINGS_IN_MULTI))
+    return out
 
 # ---------------------------------------------------------------- batch set --
 
@@ -184,117 +221,25 @@ def parse_slots(spec: str):
 
 def cmd_set(args):
     args.percent = resolve_percent(args.param, args.percent, args.index, args.div)
-    offset = param_offset(args.param, args.src)
-    raw = max(-pb.RAW_FULL, min(pb.RAW_FULL, round(args.percent * pb.RAW_FULL / 100)))
     slots = parse_slots(args.slots)
     plinky = Plinky()
-
-    print(f"{args.param}  mod {args.src}  ->  {args.percent:+g}%  (raw {raw})  "
-          f"at offset {offset}, {len(slots)} slots")
-    changes = []
-    for slot in slots:
-        cur = struct.unpack("<h", plinky.read_range(slot, offset, 2))[0]
-        if cur != raw:
-            changes.append((slot, cur))
-        print(f"  slot {slot + 1:2}: {cur * 100 / pb.RAW_FULL:+7.1f}%"
-              + ("  ->  unchanged" if cur == raw else f"  ->  {raw * 100 / pb.RAW_FULL:+.1f}%"))
+    writes, raw, changes = plan_change(plinky, args.param, args.src, args.percent, slots)
+    tail = f"  (+{STRINGS_IN_MULTI} per-string)" if len(writes) > 1 else ""
+    print(f"{args.param}  mod {args.src}  ->  {args.percent:+g}%  (raw {raw}){tail}, {len(slots)} slots")
+    for slot, cur in changes:
+        print(f"  slot {slot + 1:2}: {cur * 100 / pb.RAW_FULL:+7.1f}%  ->  {raw * 100 / pb.RAW_FULL:+.1f}%")
     if not changes:
         print("nothing to change")
         return
     if not args.write:
-        print(f"\n{len(changes)} slots would change. Re-run with --write to apply.")
+        print()
+        print(f"{len(changes)} slots would change. Re-run with --write to apply.")
         return
-
-    payload = struct.pack("<h", raw)
-    failed = []
-    for slot, _ in changes:
-        plinky.write_range(slot, offset, payload)
-        # the device saves the slot a tick after the last byte, so read it back before moving on
-        for _ in range(20):
-            time.sleep(0.05)
-            if struct.unpack("<h", plinky.read_range(slot, offset, 2))[0] == raw:
-                break
-        else:
-            failed.append(slot + 1)
-        print(f"\r  written {slot + 1}/{NUM_PRESETS}", end="", file=sys.stderr, flush=True)
-    print("\r" + " " * 32 + "\r", end="", file=sys.stderr)
-    if failed:
-        sys.exit(f"did not read back as written in slots: {failed}")
-    print(f"{len(changes)} slots written and verified")
-
-
-
-def resolve_percent(param: str, percent=None, index=None, div=None) -> float:
-    given = [x for x in (percent, index, div) if x is not None]
-    if len(given) != 1:
-        sys.exit("give exactly one of a percent, --index or --div")
-    if percent is not None:
-        return float(percent)
-    if div is not None:
-        index = div_to_index(div)
-    if param not in PARAM_RANGE:
-        sys.exit(f"no index range known for {param}; use a percent")
-    return index_to_percent(int(index), PARAM_RANGE[param])
-
-
-def plan_change(plinky, param: str, src: str, percent: float, slots):
-    """returns (offset, raw, [(slot, current_raw)]) without writing anything"""
-    offset = param_offset(param, src)
-    raw = max(-pb.RAW_FULL, min(pb.RAW_FULL, round(percent * pb.RAW_FULL / 100)))
-    changes = []
-    for slot in slots:
-        cur = struct.unpack("<h", plinky.read_range(slot, offset, 2))[0]
-        if cur != raw:
-            changes.append((slot, cur))
-    return offset, raw, changes
-
-
-def write_change(plinky, offset: int, raw: int, changes):
-    payload = struct.pack("<h", raw)
-    failed = []
-    for slot, _ in changes:
-        plinky.write_range(slot, offset, payload)
-        for _ in range(20):
-            time.sleep(0.05)
-            if struct.unpack("<h", plinky.read_range(slot, offset, 2))[0] == raw:
-                break
-        else:
-            failed.append(slot + 1)
-    return failed
-
-
-def cmd_apply(args):
-    """a recipe is a json list of {param, src, slots, and one of percent / index / div}"""
-    recipe = json.loads(Path(args.recipe).read_text(encoding="utf-8"))
-    if isinstance(recipe, dict):
-        recipe = recipe.get("steps", [])
-    plinky = Plinky()
-    planned = []
-    for step in recipe:
-        param, src = step["param"], step.get("src", "base")
-        percent = resolve_percent(param, step.get("percent"), step.get("index"), step.get("div"))
-        slots = parse_slots(str(step.get("slots", "1-32")))
-        offset, raw, changes = plan_change(plinky, param, src, percent, slots)
-        label = step.get("div") or (f"index {step['index']}" if "index" in step else f"{percent:+g}%")
-        print(f"{param:<16} {src:<4} -> {label:<10} "
-              f"{len(changes)} of {len(slots)} slots change")
-        for slot, cur in changes:
-            print(f"      slot {slot + 1:2}: {cur * 100 / pb.RAW_FULL:+7.1f}%  ->  {raw * 100 / pb.RAW_FULL:+.1f}%")
-        planned.append((offset, raw, changes))
-    total = sum(len(c) for _, _, c in planned)
-    print()
-    if not total:
-        print("nothing to change")
-        return
-    if not args.write:
-        print(f"{total} writes in total. Re-run with --write to apply.")
-        return
-    failed = []
-    for offset, raw, changes in planned:
-        failed += write_change(plinky, offset, raw, changes)
+    failed = write_change(plinky, writes, raw, changes)
     if failed:
         sys.exit(f"did not read back as written in slots: {sorted(set(failed))}")
-    print(f"{total} writes applied and verified")
+    print(f"{len(changes)} slots written and verified")
+
 
 def cmd_show(args):
     for slot, buf in sorted(read_bank(Plinky()).items()):
